@@ -1,0 +1,23 @@
+{
+  "name": "autocada",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "dependencies": {
+    "@react-email/components": "^1.0.1",
+    "@react-email/render": "^2.0.0",
+    "axios": "^1.13.2",
+    "dotenv": "^17.2.3",
+    "nodemailer": "^7.0.10",
+    "react": "^19.2.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/nodemailer": "^7.0.4",
+    "@types/react": "^19.2.6",
+    "@types/xlsx": "^0.0.36"
+  },
+  "packageManager": "pnpm@10.7.1"
+}
