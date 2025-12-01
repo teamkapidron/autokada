@@ -11,6 +11,9 @@ declare module 'global' {
         SMTP_PASSWORD: string;
 
         RECEIVER_EMAIL: string;
+
+        API_CLIENT_NUMBER: string;
+        API_CLIENT_TOKEN: string;
       }
     }
   }

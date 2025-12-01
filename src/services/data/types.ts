@@ -49,3 +49,10 @@ export interface LogisticsRow {
   pris_eks_mva: number; // price excluding VAT
   antall: string; // stock quantity
 }
+
+export interface TokenResponse {
+  token: string;
+  status: boolean;
+  code: number;
+  message: string;
+}

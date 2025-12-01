@@ -5,22 +5,62 @@ import type {
   ProductStock,
   ProductStockResponse,
   LogisticsRow,
+  TokenResponse,
 } from './types';
 
 const API_BASE_URL = 'https://api.kasseservice.no/v1';
-const AUTH_TOKEN =
-  'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXUyJ9.eyJleHAiOjE3NjQ0NDY1MDgsInVzZXJuYW1lIjoiODcyMDMwIiwiaXAiOiIxOC4xODQuMTYwLjEzMiIsImNsaWVudFJvbGVzIjpbIlJPTEVfSU5WT0lDRSIsIlJPTEVfMjRTRVZFTk9GRklDRSIsIlJPTEVfQVBJX1NFVFRJTkdTIiwiUk9MRV9PUkRFUl9NT0RVTEUiLCJST0xFX0NVU1RPTUVSX0dST1VQUyIsIlJPTEVfUFJPRFVDVF9WQVJJQU5UUyIsIlJPTEVfTE9HSVNUSUNTIiwiUk9MRV9MQUJFTF9QUklOVCIsIlJPTEVfU1RPQ0tfTE9DQVRJT04iXSwiY2xpZW50TmFtZSI6IlRSVUNLUEFSVFMgVFJBRElORyBBUyIsImNsaWVudExhbmd1YWdlIjoibm8iLCJpYXQiOiIxNzY0MTg3MzA4In0.R8xKqlcOBjGrCITIUa9d3Mah3xwouKYOpZlZgs7203iheeG04-rlDmAs3cbPuOAdqOcmTxIcJdom-TmSlnJ9Vv86beefO1UkqaanXylRFl1w_3PfDVaULGDLViBPUftR3nmYRFz4OG1vn7RAaaAE1Bf72qQurxYp9Hk3SZP5bAVL6d-LQFLMkagfdosk0km3kC-oAhhGBqEeSLM1szyJyU4CcCfps_TpphIhSMCrfms4Xtls_tBRs0WrHxnjz_2on4RCw7nKZ_d3cI2Q072pA2cC4TsAbzrGrgNu-nk1nZvKedR41pjSRLTfZxXxPkLwYdwRegCfLd-yXXUpk-YUN5allByuiNL4oTtM80hk7adLH_o-O_9GVfkU3FavLkAibqSPNLT1hhC7qs6CXwB-21HFIF1OawwdMZz-yMT2YaYAI_5I4NdzJ7mcEuTRk37WsoMjBoCaxb8-a2cVsuEX4v3XU5JUelB9SmixvQ_ttfRYTted7-QWDzAvgZHYgy9m-6ZPzs7dqqUCRSPWTXZsjj-KRGSUW916_tXrS0H22LPKSUYZNCo5wIDxqhEL8nJ9vG17hxhqyTIFA2n_wPBmsRkTJD67YImlD6NaDCpecb6Don1sS-JaE7iLkiDJ3Ych3mrXDwbA91Qd9iX5TNnItFFsUkb51cjbwyFZGUK5bXA';
 
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    Accept: 'application/json',
-    'Content-Type': 'application/x-www-form-urlencoded',
-    Authorization: AUTH_TOKEN,
-  },
-});
+let cachedToken: string | null = null;
+
+async function getAccessToken() {
+  const clientNumber = process.env.API_CLIENT_NUMBER;
+  const clientToken = process.env.API_CLIENT_TOKEN;
+
+  if (!clientNumber || !clientToken) {
+    throw new Error(
+      'API_CLIENT_NUMBER and API_CLIENT_TOKEN must be set in environment variables'
+    );
+  }
+
+  const response = await axios.post<TokenResponse>(
+    `${API_BASE_URL}/getaccesstokens`,
+    new URLSearchParams({
+      client_number: clientNumber,
+      client_token: clientToken,
+    }),
+    {
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    }
+  );
+
+  if (!response.data.status || !response.data.token) {
+    throw new Error(`Failed to get access token: ${response.data.message}`);
+  }
+
+  console.log('Successfully fetched new API token');
+  return response.data.token;
+}
+
+async function getApiClient() {
+  if (!cachedToken) {
+    cachedToken = await getAccessToken();
+  }
+
+  return axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Bearer ${cachedToken}`,
+    },
+  });
+}
 
 async function getAllProducts() {
+  const apiClient = await getApiClient();
   const allProducts: Product[] = [];
   let start = 0;
   const limit = 20;
@@ -52,6 +92,7 @@ async function getAllProducts() {
 }
 
 async function getProductStock(productIds: number[]) {
+  const apiClient = await getApiClient();
   const allStock: ProductStock[] = [];
   const BATCH_SIZE = 40;
 
