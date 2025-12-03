@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import type {
   Product,
   ProductListResponse,
@@ -9,6 +11,13 @@ import type {
 } from './types';
 
 const API_BASE_URL = 'https://api.kasseservice.no/v1';
+
+const excludedProductNumbers = new Set(
+  readFileSync(resolve(__dirname, './excluded-products.txt'), 'utf-8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+);
 
 let cachedToken: string | null = null;
 
@@ -137,9 +146,13 @@ function flattenLogisticsData(products: Product[], stock: ProductStock[]) {
     const product = productMap.get(stockItem.product_id);
     if (!product) continue;
 
-    const pris_eks_mva = product.price_inc_vat / 1.25;
-
     const paddedProductNumber = String(stockItem.product_number).trim();
+
+    if (excludedProductNumbers.has(paddedProductNumber)) {
+      continue;
+    }
+
+    const pris_eks_mva = product.price_inc_vat / 1.25;
 
     for (const department of stockItem.department) {
       if (!department.location || department.location.length === 0) {
