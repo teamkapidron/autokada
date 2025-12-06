@@ -18,7 +18,7 @@ export function convertToCSV(data: LogisticsRow[]): string {
 
   const dataRows = data.map((row) => {
     return [
-      `="${row.varenr ?? ''}"`,
+      `${row.varenr ?? ''}`,
       escapeCSV(row.navn ?? ''),
       escapeCSV(row.lokasjon ?? ''),
       row.kostpris != null ? row.kostpris.toString() : '',
