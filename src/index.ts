@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 
 import EmailService from './services/email';
 import { getStocksData } from './services/data';
-import { convertToExcel } from './services/excel';
+import { convertToCSV } from './services/csv';
 
 config({ path: resolve(__dirname, '../.env.local'), quiet: true });
 
@@ -22,7 +22,7 @@ async function main() {
 
   console.log(`Fetched ${stocksData.length} stock items`);
 
-  const excelBuffer = convertToExcel(stocksData);
+  const csvData = convertToCSV(stocksData);
 
   await emailService.sendEmail({
     to: process.env.RECEIVER_EMAIL,
@@ -33,9 +33,9 @@ async function main() {
     },
     attachments: [
       {
-        filename: 'NOR B2B stock.xlsx',
-        content: excelBuffer,
-        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filename: 'NOR B2B stock.csv',
+        content: Buffer.from(csvData, 'utf-8'),
+        contentType: 'text/csv',
       },
     ],
   });
