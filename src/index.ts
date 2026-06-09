@@ -7,14 +7,30 @@ import { convertToCSV } from './services/csv';
 
 config({ path: resolve(__dirname, '../.env.local'), quiet: true });
 
+function requiredEnv(name: string) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} must be set in environment variables`);
+  }
+
+  return value;
+}
+
+const smtpPort = Number.parseInt(requiredEnv('SMTP_PORT'), 10);
+
+if (Number.isNaN(smtpPort)) {
+  throw new Error('SMTP_PORT must be a valid number');
+}
+
 export const emailService = new EmailService(
-  process.env.SMTP_NAME,
-  process.env.SMTP_MAIL,
-  process.env.SMTP_REPLY_TO,
-  process.env.SMTP_HOST,
-  parseInt(process.env.SMTP_PORT, 10),
-  process.env.SMTP_USERNAME,
-  process.env.SMTP_PASSWORD
+  requiredEnv('SMTP_NAME'),
+  requiredEnv('SMTP_MAIL'),
+  requiredEnv('SMTP_REPLY_TO'),
+  requiredEnv('SMTP_HOST'),
+  smtpPort,
+  requiredEnv('SMTP_USERNAME'),
+  requiredEnv('SMTP_PASSWORD'),
 );
 
 async function main() {
@@ -25,7 +41,7 @@ async function main() {
   const csvData = convertToCSV(stocksData);
 
   await emailService.sendEmail({
-    to: process.env.RECEIVER_EMAIL,
+    to: requiredEnv('RECEIVER_EMAIL'),
     bcc: 'teamkapidron@gmail.com',
     subject: 'NOR B2B Stock',
     template: {

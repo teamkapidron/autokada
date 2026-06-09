@@ -9,7 +9,6 @@
     "types": ["node"],
     "lib": ["ESNext"],
     "jsx": "react-jsx",
-    "jsxImportSource": "react",
-    "baseUrl": "."
+    "jsxImportSource": "react"
   }
 }
