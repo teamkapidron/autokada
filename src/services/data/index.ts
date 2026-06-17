@@ -11,6 +11,7 @@ import type {
 } from './types';
 
 const API_BASE_URL = 'https://api.kasseservice.no/v1';
+const DEFAULT_PAGINATION_DELAY_MS = 1_000;
 
 const excludedProductNumbers = new Set(
   readFileSync(resolve(__dirname, './excluded-products.txt'), 'utf-8')
@@ -20,6 +21,14 @@ const excludedProductNumbers = new Set(
 );
 
 let cachedToken: string | null = null;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitBeforeNextPaginationRequest() {
+  await sleep(DEFAULT_PAGINATION_DELAY_MS);
+}
 
 async function getAccessToken() {
   const clientNumber = process.env.API_CLIENT_NUMBER;
@@ -92,6 +101,10 @@ async function getAllProducts() {
       allProducts.push(...data.products);
       hasMore = data.products.length === limit;
       start += limit;
+
+      if (hasMore) {
+        await waitBeforeNextPaginationRequest();
+      }
     } else {
       hasMore = false;
     }
@@ -128,6 +141,10 @@ async function getProductStock(productIds: number[]) {
         allStock.push(...data.data);
         hasMore = data.data.length === limit;
         start += limit;
+
+        if (hasMore) {
+          await waitBeforeNextPaginationRequest();
+        }
       } else {
         hasMore = false;
       }
