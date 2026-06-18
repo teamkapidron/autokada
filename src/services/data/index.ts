@@ -11,7 +11,7 @@ import type {
 } from './types';
 
 const API_BASE_URL = 'https://api.kasseservice.no/v1';
-const DEFAULT_PAGINATION_DELAY_MS = 1_000;
+const DEFAULT_PAGINATION_DELAY_MS = 10_000;
 
 const excludedProductNumbers = new Set(
   readFileSync(resolve(__dirname, './excluded-products.txt'), 'utf-8')
