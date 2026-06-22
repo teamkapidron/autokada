@@ -1,4 +1,8 @@
-import axios from 'axios';
+import axios, {
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type AxiosResponse,
+} from 'axios';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import type {
@@ -11,7 +15,10 @@ import type {
 } from './types';
 
 const API_BASE_URL = 'https://api.kasseservice.no/v1';
-const DEFAULT_PAGINATION_DELAY_MS = 10_000;
+const PAGINATION_DELAY_MS = 10_000;
+const RATE_LIMIT_RESET_BUFFER_MS = 1_000;
+const FALLBACK_RATE_LIMIT_DELAY_MS = 60_000;
+const MAX_RATE_LIMIT_RETRIES = 5;
 
 const excludedProductNumbers = new Set(
   readFileSync(resolve(__dirname, './excluded-products.txt'), 'utf-8')
@@ -27,7 +34,117 @@ function sleep(ms: number) {
 }
 
 async function waitBeforeNextPaginationRequest() {
-  await sleep(DEFAULT_PAGINATION_DELAY_MS);
+  await sleep(PAGINATION_DELAY_MS);
+}
+
+function normalizeHeaderValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return normalizeHeaderValue(value[0]);
+  }
+
+  return value === undefined || value === null ? undefined : String(value);
+}
+
+function getHeaderValue(
+  headers: AxiosResponse['headers'],
+  headerName: string
+) {
+  if (typeof headers.get === 'function') {
+    return normalizeHeaderValue(headers.get(headerName));
+  }
+
+  return normalizeHeaderValue(
+    headers[headerName] ?? headers[headerName.toLowerCase()]
+  );
+}
+
+function getRateLimitDelayMs(response?: AxiosResponse) {
+  if (!response) {
+    return FALLBACK_RATE_LIMIT_DELAY_MS;
+  }
+
+  const retryAfter = getHeaderValue(response.headers, 'retry-after');
+
+  if (retryAfter) {
+    const retryAfterSeconds = Number.parseInt(retryAfter, 10);
+
+    if (!Number.isNaN(retryAfterSeconds)) {
+      return retryAfterSeconds * 1000 + RATE_LIMIT_RESET_BUFFER_MS;
+    }
+
+    const retryAfterDate = Date.parse(retryAfter);
+
+    if (!Number.isNaN(retryAfterDate)) {
+      return Math.max(
+        retryAfterDate - Date.now() + RATE_LIMIT_RESET_BUFFER_MS,
+        RATE_LIMIT_RESET_BUFFER_MS
+      );
+    }
+  }
+
+  const reset = getHeaderValue(response.headers, 'x-duell-ratelimit-reset');
+
+  if (reset) {
+    const resetSeconds = Number.parseInt(reset, 10);
+
+    if (!Number.isNaN(resetSeconds)) {
+      return Math.max(
+        resetSeconds * 1000 - Date.now() + RATE_LIMIT_RESET_BUFFER_MS,
+        RATE_LIMIT_RESET_BUFFER_MS
+      );
+    }
+  }
+
+  return FALLBACK_RATE_LIMIT_DELAY_MS;
+}
+
+async function waitIfRateLimitExhausted(response: AxiosResponse) {
+  const remaining = getHeaderValue(
+    response.headers,
+    'x-duell-ratelimit-remaining'
+  );
+
+  if (remaining === '0') {
+    const delayMs = getRateLimitDelayMs(response);
+    console.log(
+      `API rate limit exhausted. Waiting ${Math.ceil(delayMs / 1000)} seconds before continuing.`
+    );
+    await sleep(delayMs);
+  }
+}
+
+async function rateLimitedGet<T>(
+  apiClient: AxiosInstance,
+  url: string,
+  config: AxiosRequestConfig,
+  label: string
+) {
+  for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt += 1) {
+    try {
+      const response = await apiClient.get<T>(url, config);
+      await waitIfRateLimitExhausted(response);
+      return response;
+    } catch (error) {
+      if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 429 &&
+        attempt < MAX_RATE_LIMIT_RETRIES
+      ) {
+        const delayMs = getRateLimitDelayMs(error.response);
+        console.log(
+          `Rate limited while fetching ${label}. Waiting ${Math.ceil(
+            delayMs / 1000
+          )} seconds before retry ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES}.`
+        );
+        await sleep(delayMs);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error(`Rate limit retries exhausted while fetching ${label}`);
 }
 
 async function getAccessToken() {
@@ -85,13 +202,18 @@ async function getAllProducts() {
   let hasMore = true;
 
   while (hasMore) {
-    const { data } = await apiClient.get<ProductListResponse>('/product/list', {
-      params: {
-        start,
-        limit,
-        'filter[category_id]': 3,
+    const { data } = await rateLimitedGet<ProductListResponse>(
+      apiClient,
+      '/product/list',
+      {
+        params: {
+          start,
+          limit,
+          'filter[category_id]': 3,
+        },
       },
-    });
+      `products page starting at ${start}`
+    );
 
     if (
       data.products &&
@@ -126,7 +248,8 @@ async function getProductStock(productIds: number[]) {
     let hasMore = true;
 
     while (hasMore) {
-      const { data } = await apiClient.get<ProductStockResponse>(
+      const { data } = await rateLimitedGet<ProductStockResponse>(
+        apiClient,
         '/all/product/stock',
         {
           params: {
@@ -134,7 +257,8 @@ async function getProductStock(productIds: number[]) {
             limit,
             'filter[product_id]': batchIds,
           },
-        }
+        },
+        `stock batch ${i / BATCH_SIZE + 1} page starting at ${start}`
       );
 
       if (data.data && Array.isArray(data.data) && data.data.length > 0) {
